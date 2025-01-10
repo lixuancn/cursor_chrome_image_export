@@ -8,7 +8,12 @@
     "downloads",
     "tabs",
     "activeTab",
-    "scripting"
+    "scripting",
+    "notifications"
+  ],
+  "host_permissions": [
+    "http://*/*",
+    "https://*/*"
   ],
   "web_accessible_resources": [{
     "resources": ["lib/jspdf.umd.min.js"],

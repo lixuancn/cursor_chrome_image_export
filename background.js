@@ -22,6 +22,19 @@ async function takeFullScreenshot() {
 async function takeAreaScreenshot() {
   const tab = await getCurrentTab();
   
+  // 检查是否是chrome://页面
+  if (tab.url.startsWith('chrome://')) {
+    console.error('Cannot take screenshots of chrome:// pages');
+    // 可以选择显示一个通知给用户
+    chrome.notifications.create({
+      type: 'basic',
+      iconUrl: 'images/icon128.png',
+      title: '无法截图',
+      message: '由于浏览器限制，无法对chrome://页面进行截图'
+    });
+    return;
+  }
+  
   isScreenshotMode = true;
   
   // 注入选区工具
@@ -219,7 +232,13 @@ async function cropScreenshot(dataUrl, area, viewport) {
     const bitmap = await createImageBitmap(blob);
     
     // 计算设备像素比
-    const scale = bitmap.width / viewport.width;
+    const scale = Math.round(bitmap.width / viewport.width);
+    
+    console.log('Scale calculation:', {
+      bitmapWidth: bitmap.width,
+      viewportWidth: viewport.width,
+      computedScale: scale
+    });
     
     // 调整坐标和尺寸以匹配实际像素
     const scaledArea = {
@@ -242,8 +261,8 @@ async function cropScreenshot(dataUrl, area, viewport) {
     const validArea = {
       x: Math.max(0, Math.min(scaledArea.x, bitmap.width)),
       y: Math.max(0, Math.min(scaledArea.y, bitmap.height)),
-      width: Math.min(scaledArea.width, bitmap.width),
-      height: Math.min(scaledArea.height, bitmap.height)
+      width: Math.min(scaledArea.width, bitmap.width - scaledArea.x),
+      height: Math.min(scaledArea.height, bitmap.height - scaledArea.y)
     };
 
     // 检查区域是否有效
@@ -251,14 +270,6 @@ async function cropScreenshot(dataUrl, area, viewport) {
         validArea.x >= bitmap.width || validArea.y >= bitmap.height) {
       console.error('Area is outside of image bounds:', { original: area, valid: validArea });
       return;
-    }
-
-    // 确保不会超出图片边界
-    if (validArea.x + validArea.width > bitmap.width) {
-      validArea.width = bitmap.width - validArea.x;
-    }
-    if (validArea.y + validArea.height > bitmap.height) {
-      validArea.height = bitmap.height - validArea.y;
     }
 
     // 使用 OffscreenCanvas
