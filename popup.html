@@ -1,0 +1,42 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <style>
+    body {
+      width: 400px;
+      padding: 10px;
+    }
+    .image-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 10px;
+      margin-bottom: 10px;
+    }
+    .image-item {
+      position: relative;
+    }
+    .image-item img {
+      width: 100%;
+      height: auto;
+    }
+    .image-checkbox {
+      position: absolute;
+      top: 5px;
+      left: 5px;
+    }
+    .controls {
+      margin-bottom: 10px;
+    }
+  </style>
+</head>
+<body>
+  <div class="controls">
+    <button id="exportPdf">导出选中图片为PDF</button>
+    <button id="clearAll">清空所有截图</button>
+  </div>
+  <div id="imageGrid" class="image-grid"></div>
+  <script src="lib/jspdf.umd.min.js"></script>
+  <script src="popup.js"></script>
+</body>
+</html> 

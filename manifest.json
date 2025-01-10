@@ -1,0 +1,39 @@
+{
+  "manifest_version": 3,
+  "name": "截图助手",
+  "version": "1.0",
+  "description": "截图、保存和导出PDF工具",
+  "content_security_policy": {
+    "extension_pages": "script-src 'self'; object-src 'self'"
+  },
+  "permissions": [
+    "storage",
+    "downloads",
+    "tabs",
+    "activeTab",
+    "scripting"
+  ],
+  "action": {
+    "default_popup": "popup.html",
+    "default_icon": {
+      "128": "images/icon128.png"
+    }
+  },
+  "commands": {
+    "take-screenshot": {
+      "suggested_key": {
+        "default": "Alt+E"
+      },
+      "description": "截取全屏"
+    },
+    "take-area-screenshot": {
+      "suggested_key": {
+        "default": "Alt+W"
+      },
+      "description": "截取选定区域"
+    }
+  },
+  "background": {
+    "service_worker": "background.js"
+  }
+} 
