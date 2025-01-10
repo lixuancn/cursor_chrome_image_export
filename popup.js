@@ -4,6 +4,15 @@ document.addEventListener('DOMContentLoaded', function() {
   document.getElementById('clearAll').addEventListener('click', clearAllScreenshots);
 });
 
+function clearAllScreenshots() {
+  if (confirm('确定要清空所有截图吗？')) {
+    chrome.storage.local.set({ screenshots: [] }, function() {
+      // 清空后重新加载图片列表
+      loadImages();
+    });
+  }
+}
+
 function loadImages() {
   chrome.storage.local.get(['screenshots'], function(result) {
     const screenshots = result.screenshots || [];
@@ -28,35 +37,22 @@ async function exportToPdf() {
     return;
   }
 
-  const doc = new window.jspdf.jsPDF();
+  const { jsPDF } = window.jspdf;
+  const doc = new jsPDF();
   let y = 10;
 
-  for (let i = 0; i < selectedImages.length; i++) {
-    const checkbox = selectedImages[i];
+  for (const checkbox of selectedImages) {
     const img = checkbox.nextElementSibling;
     const imgData = img.src;
     
-    // 计算图片在PDF中的尺寸
-    const imgWidth = 190;
-    const imgHeight = (img.naturalHeight * imgWidth) / img.naturalWidth;
+    doc.addImage(imgData, 'PNG', 10, y, 190, 0);
+    y += 150;
     
-    doc.addImage(imgData, 'PNG', 10, y, imgWidth, imgHeight);
-    y += imgHeight + 10;
-    
-    if (y > 280 && i < selectedImages.length - 1) {
+    if (y > 280) {
       doc.addPage();
       y = 10;
     }
   }
 
   doc.save('screenshots.pdf');
-}
-
-// 添加清空功能
-function clearAllScreenshots() {
-  if (confirm('确定要清空所有截图吗？')) {
-    chrome.storage.local.set({ screenshots: [] }, function() {
-      loadImages(); // 重新加载图片列表（现在应该是空的）
-    });
-  }
 } 

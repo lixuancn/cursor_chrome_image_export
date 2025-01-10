@@ -3,9 +3,6 @@
   "name": "截图助手",
   "version": "1.0",
   "description": "截图、保存和导出PDF工具",
-  "content_security_policy": {
-    "extension_pages": "script-src 'self'; object-src 'self'"
-  },
   "permissions": [
     "storage",
     "downloads",
@@ -13,6 +10,10 @@
     "activeTab",
     "scripting"
   ],
+  "web_accessible_resources": [{
+    "resources": ["lib/jspdf.umd.min.js"],
+    "matches": ["<all_urls>"]
+  }],
   "action": {
     "default_popup": "popup.html",
     "default_icon": {

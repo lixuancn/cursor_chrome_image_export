@@ -1,8 +1,13 @@
+let isScreenshotMode = false;  // 添加状态标志
+
 chrome.commands.onCommand.addListener((command) => {
   if (command === "take-screenshot") {
     takeFullScreenshot();
   } else if (command === "take-area-screenshot") {
-    takeAreaScreenshot();
+    // 只有在非截图模式时才启动截图
+    if (!isScreenshotMode) {
+      takeAreaScreenshot();
+    }
   }
 });
 
@@ -16,6 +21,8 @@ async function takeFullScreenshot() {
 
 async function takeAreaScreenshot() {
   const tab = await getCurrentTab();
+  
+  isScreenshotMode = true;
   
   // 注入选区工具
   await chrome.scripting.insertCSS({
@@ -37,6 +44,20 @@ async function takeAreaScreenshot() {
         z-index: 999998;
         cursor: crosshair;
       }
+      .debug-point {
+        position: fixed;
+        width: 10px;
+        height: 10px;
+        border-radius: 50%;
+        z-index: 999999;
+        pointer-events: none;
+      }
+      .start-point {
+        background: red;
+      }
+      .end-point {
+        background: blue;
+      }
     `
   });
 
@@ -49,20 +70,66 @@ async function takeAreaScreenshot() {
 function initializeAreaSelection() {
   let startX, startY, isDrawing = false;
   let overlay, selection;
+  let eventListenersAdded = false;
+
+  // 先移除可能存在的旧元素和监听器
+  const cleanup = () => {
+    const oldOverlay = document.querySelector('.screenshot-overlay');
+    const oldSelection = document.querySelector('.screenshot-area');
+    const oldStartPoint = document.getElementById('debug-start-point');
+    const oldEndPoint = document.getElementById('debug-end-point');
+    
+    if (oldOverlay) oldOverlay.remove();
+    if (oldSelection) oldSelection.remove();
+    if (oldStartPoint) oldStartPoint.remove();
+    if (oldEndPoint) oldEndPoint.remove();
+    
+    // 如果之前添加过监听器，先移除它们
+    if (eventListenersAdded) {
+      document.removeEventListener('mousedown', startDrawing);
+      document.removeEventListener('mousemove', drawSelection);
+      document.removeEventListener('mouseup', endDrawing);
+      document.removeEventListener('keydown', handleKeydown);
+      eventListenersAdded = false;
+    }
+  };
+  
+  cleanup();
 
   // 创建遮罩层
   overlay = document.createElement('div');
   overlay.className = 'screenshot-overlay';
   document.body.appendChild(overlay);
 
-  overlay.addEventListener('mousedown', startDrawing);
-  overlay.addEventListener('mousemove', drawSelection);
-  overlay.addEventListener('mouseup', endDrawing);
+  // 将事件监听器添加到document上，以捕获所有鼠标事件
+  document.addEventListener('mousedown', startDrawing);
+  document.addEventListener('mousemove', drawSelection);
+  document.addEventListener('mouseup', endDrawing);
+  document.addEventListener('keydown', handleKeydown);
+  eventListenersAdded = true;
+
+  function handleKeydown(e) {
+    if (e.key === 'Escape') {
+      exitScreenshotMode();
+    }
+  }
 
   function startDrawing(e) {
+    // 防止事件冒泡
+    e.stopPropagation();
+    e.preventDefault();
     isDrawing = true;
-    startX = e.clientX;
-    startY = e.clientY;
+    // 记录相对于页面的初始坐标
+    startX = e.clientX + window.scrollX;
+    startY = e.clientY + window.scrollY;
+
+    // 添加起始点标记
+    const startPoint = document.createElement('div');
+    startPoint.className = 'debug-point start-point';
+    startPoint.style.left = (e.clientX - 5) + 'px';
+    startPoint.style.top = (e.clientY - 5) + 'px';
+    startPoint.id = 'debug-start-point';
+    document.body.appendChild(startPoint);
 
     selection = document.createElement('div');
     selection.className = 'screenshot-area';
@@ -71,17 +138,21 @@ function initializeAreaSelection() {
 
   function drawSelection(e) {
     if (!isDrawing) return;
+    // 防止事件冒泡
+    e.stopPropagation();
+    e.preventDefault();
 
-    const currentX = e.clientX;
-    const currentY = e.clientY;
+    const currentX = e.clientX + window.scrollX;
+    const currentY = e.clientY + window.scrollY;
 
     const left = Math.min(startX, currentX);
     const top = Math.min(startY, currentY);
     const width = Math.abs(currentX - startX);
     const height = Math.abs(currentY - startY);
 
-    selection.style.left = left + 'px';
-    selection.style.top = top + 'px';
+    // 选择框需要使用视口坐标
+    selection.style.left = (left - window.scrollX) + 'px';
+    selection.style.top = (top - window.scrollY) + 'px';
     selection.style.width = width + 'px';
     selection.style.height = height + 'px';
   }
@@ -90,22 +161,42 @@ function initializeAreaSelection() {
     if (!isDrawing) return;
     isDrawing = false;
 
-    const rect = selection.getBoundingClientRect();
+    // 保存坐标信息
+    const endX = e.clientX + window.scrollX;
+    const endY = e.clientY + window.scrollY;
+    const left = Math.min(startX, endX);
+    const top = Math.min(startY, endY);
+    const width = Math.abs(endX - startX);
+    const height = Math.abs(endY - startY);
     
-    // 移除选区和遮罩
-    selection.remove();
-    overlay.remove();
+    // 先移除所有UI元素和事件监听器
+    cleanup();
 
     // 发送选区信息给background脚本
     chrome.runtime.sendMessage({
       type: 'capture-area',
       area: {
-        x: rect.left,
-        y: rect.top,
-        width: rect.width,
-        height: rect.height
+        x: left,
+        y: top,
+        width: width,
+        height: height
+      },
+      viewport: {
+        width: document.documentElement.clientWidth,
+        height: document.documentElement.clientHeight
       }
     });
+
+    // 延迟通知退出截图模式
+    setTimeout(() => {
+      chrome.runtime.sendMessage({ type: 'exit-screenshot-mode' });
+    }, 500);
+  }
+  
+  function exitScreenshotMode() {
+    cleanup();
+    // 通知 background 脚本退出截图模式
+    chrome.runtime.sendMessage({ type: 'exit-screenshot-mode' });
   }
 }
 
@@ -113,45 +204,93 @@ function initializeAreaSelection() {
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (message.type === 'capture-area') {
     chrome.tabs.captureVisibleTab(null, {format: 'png'}, function(dataUrl) {
-      cropScreenshot(dataUrl, message.area);
+      cropScreenshot(dataUrl, message.area, message.viewport);
     });
+  } else if (message.type === 'exit-screenshot-mode') {
+    isScreenshotMode = false;
   }
 });
 
-async function cropScreenshot(dataUrl, area) {
+async function cropScreenshot(dataUrl, area, viewport) {
   try {
-    // 使用 OffscreenCanvas
-    const canvas = new OffscreenCanvas(area.width, area.height);
-    const ctx = canvas.getContext('2d');
-    
-    // 创建临时 OffscreenCanvas
-    const tempCanvas = new OffscreenCanvas(1, 1);  // 临时大小
-    const tempCtx = tempCanvas.getContext('2d');
-    
-    // 从 dataUrl 加载图片数据
-    const imageData = await fetch(dataUrl);
-    const blob = await imageData.blob();
+    // 创建位图
+    const response = await fetch(dataUrl);
+    const blob = await response.blob();
     const bitmap = await createImageBitmap(blob);
     
-    // 设置临时 canvas 大小为原始图片大小
-    tempCanvas.width = bitmap.width;
-    tempCanvas.height = bitmap.height;
+    // 计算设备像素比
+    const scale = bitmap.width / viewport.width;
     
-    // 在临时 canvas 上绘制完整图片
-    tempCtx.drawImage(bitmap, 0, 0);
+    // 调整坐标和尺寸以匹配实际像素
+    const scaledArea = {
+      x: Math.round(area.x * scale),
+      y: Math.round(area.y * scale),
+      width: Math.round(area.width * scale),
+      height: Math.round(area.height * scale)
+    };
     
-    // 从临时 canvas 复制选定区域到最终 canvas
-    ctx.drawImage(tempCanvas, 
-      area.x, area.y, area.width, area.height,
-      0, 0, area.width, area.height);
+    console.log('Cropping screenshot:', {
+      area,
+      scaledArea,
+      bitmap: {
+        width: bitmap.width,
+        height: bitmap.height
+      }
+    });
+
+    // 确保坐标和尺寸在有效范围内
+    const validArea = {
+      x: Math.max(0, Math.min(scaledArea.x, bitmap.width)),
+      y: Math.max(0, Math.min(scaledArea.y, bitmap.height)),
+      width: Math.min(scaledArea.width, bitmap.width),
+      height: Math.min(scaledArea.height, bitmap.height)
+    };
+
+    // 检查区域是否有效
+    if (validArea.width <= 0 || validArea.height <= 0 || 
+        validArea.x >= bitmap.width || validArea.y >= bitmap.height) {
+      console.error('Area is outside of image bounds:', { original: area, valid: validArea });
+      return;
+    }
+
+    // 确保不会超出图片边界
+    if (validArea.x + validArea.width > bitmap.width) {
+      validArea.width = bitmap.width - validArea.x;
+    }
+    if (validArea.y + validArea.height > bitmap.height) {
+      validArea.height = bitmap.height - validArea.y;
+    }
+
+    // 使用 OffscreenCanvas
+    const canvas = new OffscreenCanvas(validArea.width, validArea.height);
+    const ctx = canvas.getContext('2d');
     
-    // 将 OffscreenCanvas 转换为 Blob
+    // 绘制选中区域
+    ctx.drawImage(bitmap,
+      validArea.x, validArea.y, validArea.width, validArea.height,
+      0, 0, validArea.width, validArea.height
+    );
+
+    console.log('Crop operation completed:', {
+      source: {
+        x: validArea.x,
+        y: validArea.y,
+        width: validArea.width,
+        height: validArea.height
+      },
+      canvas: {
+        width: canvas.width,
+        height: canvas.height
+      }
+    });
+    
+    // 转换为 blob
     const croppedBlob = await canvas.convertToBlob({
       type: 'image/png',
       quality: 1.0
     });
     
-    // 将 Blob 转换为 DataURL
+    // 转换为 dataURL
     const croppedDataUrl = await new Promise((resolve) => {
       const reader = new FileReader();
       reader.onloadend = () => resolve(reader.result);
@@ -166,13 +305,14 @@ async function cropScreenshot(dataUrl, area) {
     
     saveScreenshot(croppedDataUrl);
   } catch (error) {
-    console.error('Error processing screenshot:', error);
+    console.error('Error loading image for cropping:', error);
   }
 }
 
 function saveScreenshot(dataUrl) {
   const timestamp = new Date().getTime();
-  const filename = `screenshot_${timestamp}.png`;
+  
+  const filename = `screenshots/screenshot_${timestamp}.png`;
   
   // 保存到本地存储
   chrome.storage.local.get(['screenshots'], function(result) {
@@ -189,7 +329,14 @@ function saveScreenshot(dataUrl) {
   chrome.downloads.download({
     url: dataUrl,
     filename: filename,
-    saveAs: false
+    saveAs: false,
+    conflictAction: 'overwrite'
+  }, function(downloadId) {
+    if (chrome.runtime.lastError) {
+      console.error('Download failed:', chrome.runtime.lastError);
+    } else {
+      console.log('Screenshot saved:', filename);
+    }
   });
 }
 

@@ -1,0 +1,38 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <style>
+    body {
+      padding: 20px;
+    }
+    .form-group {
+      margin-bottom: 15px;
+    }
+    label {
+      display: block;
+      margin-bottom: 5px;
+    }
+    input[type="text"] {
+      width: 300px;
+      padding: 5px;
+    }
+  </style>
+</head>
+<body>
+  <div class="form-group">
+    <label for="savePath">截图保存路径（可选，不要以斜杠开头）：</label>
+    <input type="text" id="savePath" placeholder="例如：screenshots 或 images/screenshots（默认为 screenshots）">
+  </div>
+  <div class="tips" style="color: #666; margin-top: 5px; font-size: 12px;">
+    提示：<br>
+    1. 路径相对于下载目录<br>
+    2. 不要以斜杠开头<br>
+    3. 可以使用子目录，如：images/screenshots<br>
+    4. 留空则使用默认路径：screenshots
+  </div>
+  <div id="status"></div>
+  <button id="save">保存设置</button>
+  <script src="options.js"></script>
+</body>
+</html> 
